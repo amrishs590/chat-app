@@ -1,10 +1,11 @@
-import React, { useEffect, useState,useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
 import "./ChatPage.css";
 
 const ChatPage = () => {
   const navigate = useNavigate();
+  const inputRef = useRef(null);
   const bottomRef = useRef(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
@@ -16,6 +17,11 @@ const ChatPage = () => {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+  useEffect(() => {
+    if (selectedUser && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [selectedUser]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -152,6 +158,14 @@ const ChatPage = () => {
     navigate("/login");
   };
 
+  const handleUserClick = (user) => {
+    if (selectedUser && selectedUser.id === user.id) {
+      setSelectedUser(null); // Close chat
+    } else {
+      setSelectedUser(user); // Open chat
+    }
+  };
+
   return (
     <div className="chat-container">
       {/* Sidebar */}
@@ -163,7 +177,7 @@ const ChatPage = () => {
             className={`user-item ${
               selectedUser?.id === user.id ? "selected-user" : ""
             }`}
-            onClick={() => setSelectedUser(user)}
+            onClick={() => handleUserClick(user)}
             style={{ position: "relative" }}
           >
             {friendNames[user.id] || user.email}
@@ -199,30 +213,35 @@ const ChatPage = () => {
       </div>
 
       {/* Chat Area */}
-      <div className="chat-area">
+      <div className="chat-area fade-in">
         {selectedUser ? (
           <>
             <h3 className="chat-header">
               Chat with {friendNames[selectedUser.id] || selectedUser.email}
             </h3>
             <div className="chat-messages">
-              {messages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`chat-bubble ${
-                    msg.sender_id === currentUser.id ? "sent" : "received"
-                  }`}
-                >
-                  <div>{msg.message}</div>
-                  {msg.sender_id === currentUser.id && msg.seen && (
-                    <span className="seen-indicator">✓ Seen</span>
-                  )}
-                  <div ref={bottomRef}></div>
-                </div>
-              ))}
+              {messages.length === 0 ? (
+                <p className="empty-msg">🗨️ No messages yet. Say hi!</p>
+              ) : (
+                messages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`chat-bubble ${
+                      msg.sender_id === currentUser.id ? "sent" : "received"
+                    }`}
+                  >
+                    <div>{msg.message}</div>
+                    {msg.sender_id === currentUser.id && msg.seen && (
+                      <span className="seen-indicator">✓ Seen</span>
+                    )}
+                    <div ref={bottomRef}></div>
+                  </div>
+                ))
+              )}
             </div>
             <div className="chat-input-area">
               <input
+                ref={inputRef}
                 type="text"
                 value={newMsg}
                 onChange={(e) => setNewMsg(e.target.value)}
@@ -236,7 +255,13 @@ const ChatPage = () => {
             </div>
           </>
         ) : (
-          <h3 className="chat-placeholder">Select a user to start chatting</h3>
+          <div className="chat-placeholder fade-in">
+            <div className="welcome-card">
+              <div className="welcome-icon">💬</div>
+              <h2>Welcome to ChatApp</h2>
+              <p>Select a user from the left to start chatting.</p>
+            </div>
+          </div>
         )}
       </div>
     </div>
