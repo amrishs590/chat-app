@@ -10,6 +10,7 @@ const ChatPage = () => {
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
 
+  // Fetch current user and user list
   useEffect(() => {
     const fetchData = async () => {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -29,6 +30,7 @@ const ChatPage = () => {
     fetchData();
   }, [navigate]);
 
+  // Fetch messages when a user is selected
   useEffect(() => {
     if (!selectedUser || !currentUser) return;
 
@@ -45,6 +47,11 @@ const ChatPage = () => {
     };
 
     loadMessages();
+  }, [selectedUser, currentUser]);
+
+  // Subscribe to real-time messages
+  useEffect(() => {
+    if (!currentUser) return;
 
     const channel = supabase
       .channel("realtime:messages")
@@ -57,13 +64,20 @@ const ChatPage = () => {
         },
         (payload) => {
           const msg = payload.new;
+
+          // Only add messages where current user is involved
           if (
-            (msg.sender_id === currentUser.id &&
-              msg.receiver_id === selectedUser.id) ||
-            (msg.sender_id === selectedUser.id &&
-              msg.receiver_id === currentUser.id)
+            msg.receiver_id === currentUser.id ||
+            msg.sender_id === currentUser.id
           ) {
-            setMessages((prev) => [...prev, msg]);
+            // Add only if the message is part of the current open chat
+            if (
+              selectedUser &&
+              (msg.sender_id === selectedUser.id ||
+                msg.receiver_id === selectedUser.id)
+            ) {
+              setMessages((prev) => [...prev, msg]);
+            }
           }
         }
       )
@@ -72,18 +86,26 @@ const ChatPage = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedUser, currentUser]);
+  }, [currentUser, selectedUser]);
 
+  // Send message
   const sendMessage = async () => {
     if (!newMsg.trim()) return;
 
-    await supabase.from("messages").insert([
-      {
-        sender_id: currentUser.id,
-        receiver_id: selectedUser.id,
-        message: newMsg.trim(),
-      },
-    ]);
+    const { data, error } = await supabase
+      .from("messages")
+      .insert([
+        {
+          sender_id: currentUser.id,
+          receiver_id: selectedUser.id,
+          message: newMsg.trim(),
+        },
+      ])
+      .select();
+
+    if (data && data[0]) {
+      setMessages((prev) => [...prev, data[0]]);
+    }
     setNewMsg("");
   };
 
@@ -94,8 +116,14 @@ const ChatPage = () => {
 
   return (
     <div style={{ display: "flex", height: "100vh" }}>
-      {/* User List */}
-      <div style={{ width: "250px", borderRight: "1px solid #ccc", padding: "20px" }}>
+      {/* Sidebar with users */}
+      <div
+        style={{
+          width: "250px",
+          borderRight: "1px solid #ccc",
+          padding: "20px",
+        }}
+      >
         <h3>Users</h3>
         {users.map((user) => (
           <div
@@ -103,7 +131,8 @@ const ChatPage = () => {
             style={{
               padding: "10px",
               cursor: "pointer",
-              background: selectedUser?.id === user.id ? "#e0e7ff" : "transparent",
+              background:
+                selectedUser?.id === user.id ? "#e0e7ff" : "transparent",
               borderRadius: "5px",
             }}
             onClick={() => setSelectedUser(user)}
@@ -116,8 +145,15 @@ const ChatPage = () => {
         </button>
       </div>
 
-      {/* Chat Area */}
-      <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column" }}>
+      {/* Chat area */}
+      <div
+        style={{
+          flex: 1,
+          padding: "20px",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         {selectedUser ? (
           <>
             <h3>Chat with {selectedUser.email}</h3>
@@ -135,15 +171,19 @@ const ChatPage = () => {
                 <div
                   key={idx}
                   style={{
-                    textAlign: msg.sender_id === currentUser.id ? "right" : "left",
+                    textAlign:
+                      msg.sender_id === currentUser.id ? "right" : "left",
                     marginBottom: "8px",
                   }}
                 >
                   <span
                     style={{
                       backgroundColor:
-                        msg.sender_id === currentUser.id ? "#4f46e5" : "#e5e5e5",
-                      color: msg.sender_id === currentUser.id ? "white" : "black",
+                        msg.sender_id === currentUser.id
+                          ? "#4f46e5"
+                          : "#e5e5e5",
+                      color:
+                        msg.sender_id === currentUser.id ? "white" : "black",
                       padding: "8px 12px",
                       borderRadius: "15px",
                       display: "inline-block",
