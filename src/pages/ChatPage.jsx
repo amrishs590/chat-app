@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
+import "./ChatPage.css";
 
 const ChatPage = () => {
   const navigate = useNavigate();
@@ -9,8 +10,8 @@ const ChatPage = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
+  const [friendNames, setFriendNames] = useState({});
 
-  // Fetch current user and user list
   useEffect(() => {
     const fetchData = async () => {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -19,23 +20,30 @@ const ChatPage = () => {
       const currentUser = sessionData.session.user;
       setCurrentUser(currentUser);
 
-      const { data: userList } = await supabase
-        .from("profiles")
-        .select("id, email");
-
+      const { data: userList } = await supabase.from("profiles").select("id, email");
       const filteredUsers = userList.filter((u) => u.id !== currentUser.id);
       setUsers(filteredUsers);
+
+      const { data: namesData } = await supabase
+        .from("friend_names")
+        .select("*")
+        .eq("user_id", currentUser.id);
+
+      const namesMap = {};
+      namesData?.forEach((item) => {
+        namesMap[item.friend_id] = item.custom_name;
+      });
+      setFriendNames(namesMap);
     };
 
     fetchData();
   }, [navigate]);
 
-  // Fetch messages when a user is selected
   useEffect(() => {
     if (!selectedUser || !currentUser) return;
 
     const loadMessages = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("messages")
         .select("*")
         .or(
@@ -49,7 +57,6 @@ const ChatPage = () => {
     loadMessages();
   }, [selectedUser, currentUser]);
 
-  // Subscribe to real-time messages
   useEffect(() => {
     if (!currentUser) return;
 
@@ -64,13 +71,10 @@ const ChatPage = () => {
         },
         (payload) => {
           const msg = payload.new;
-
-          // Only add messages where current user is involved
           if (
             msg.receiver_id === currentUser.id ||
             msg.sender_id === currentUser.id
           ) {
-            // Add only if the message is part of the current open chat
             if (
               selectedUser &&
               (msg.sender_id === selectedUser.id ||
@@ -88,11 +92,10 @@ const ChatPage = () => {
     };
   }, [currentUser, selectedUser]);
 
-  // Send message
   const sendMessage = async () => {
     if (!newMsg.trim()) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("messages")
       .insert([
         {
@@ -109,106 +112,103 @@ const ChatPage = () => {
     setNewMsg("");
   };
 
+  const updateFriendName = async (friendId, name) => {
+    const { data, error } = await supabase
+      .from("friend_names")
+      .upsert([
+        {
+          user_id: currentUser.id,
+          friend_id: friendId,
+          custom_name: name,
+        },
+      ]);
+
+    if (!error) {
+      setFriendNames((prev) => ({ ...prev, [friendId]: name }));
+    } else {
+      console.error("Failed to update name:", error.message);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
-      {/* Sidebar with users */}
-      <div
-        style={{
-          width: "250px",
-          borderRight: "1px solid #ccc",
-          padding: "20px",
-        }}
-      >
+    <div className="chat-container">
+      {/* Sidebar */}
+      <div className="sidebar">
         <h3>Users</h3>
         {users.map((user) => (
           <div
             key={user.id}
-            style={{
-              padding: "10px",
-              cursor: "pointer",
-              background:
-                selectedUser?.id === user.id ? "#e0e7ff" : "transparent",
-              borderRadius: "5px",
-            }}
+            className={`user-item ${selectedUser?.id === user.id ? "selected-user" : ""}`}
             onClick={() => setSelectedUser(user)}
+            style={{ position: "relative" }}
           >
-            {user.email}
+            {friendNames[user.id] || user.email}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const newName = prompt("Enter custom name:", friendNames[user.id] || "");
+                if (newName !== null) {
+                  updateFriendName(user.id, newName);
+                }
+              }}
+              style={{
+                position: "absolute",
+                right: "10px",
+                background: "none",
+                border: "none",
+                color: "#4f46e5",
+                fontSize: "14px",
+                cursor: "pointer",
+              }}
+              title="Edit Name"
+            >
+              ✏️
+            </button>
           </div>
         ))}
-        <button onClick={handleLogout} style={{ marginTop: "20px" }}>
+        <button className="logout-btn" onClick={handleLogout}>
           Logout
         </button>
       </div>
 
-      {/* Chat area */}
-      <div
-        style={{
-          flex: 1,
-          padding: "20px",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+      {/* Chat Area */}
+      <div className="chat-area">
         {selectedUser ? (
           <>
-            <h3>Chat with {selectedUser.email}</h3>
-            <div
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                marginBottom: "10px",
-                border: "1px solid #ccc",
-                padding: "10px",
-                borderRadius: "5px",
-              }}
-            >
+            <h3 className="chat-header">
+              Chat with {friendNames[selectedUser.id] || selectedUser.email}
+            </h3>
+            <div className="chat-messages">
               {messages.map((msg, idx) => (
                 <div
                   key={idx}
-                  style={{
-                    textAlign:
-                      msg.sender_id === currentUser.id ? "right" : "left",
-                    marginBottom: "8px",
-                  }}
+                  className={`chat-bubble ${msg.sender_id === currentUser.id ? "sent" : "received"}`}
                 >
-                  <span
-                    style={{
-                      backgroundColor:
-                        msg.sender_id === currentUser.id
-                          ? "#4f46e5"
-                          : "#e5e5e5",
-                      color:
-                        msg.sender_id === currentUser.id ? "white" : "black",
-                      padding: "8px 12px",
-                      borderRadius: "15px",
-                      display: "inline-block",
-                      maxWidth: "70%",
-                    }}
-                  >
-                    {msg.message}
-                  </span>
+                  {msg.message}
                 </div>
               ))}
             </div>
-            <div>
+            <div className="chat-input-area">
               <input
                 type="text"
                 value={newMsg}
                 onChange={(e) => setNewMsg(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 placeholder="Type a message..."
-                style={{ width: "80%", padding: "10px", marginRight: "10px" }}
+                className="chat-input"
               />
-              <button onClick={sendMessage}>Send</button>
+              <button onClick={sendMessage} className="send-btn">
+                Send
+              </button>
             </div>
           </>
         ) : (
-          <h3>Select a user to start chatting</h3>
+          <h3 className="chat-placeholder">Select a user to start chatting</h3>
         )}
       </div>
     </div>
