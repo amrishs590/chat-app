@@ -46,6 +46,15 @@ const LoginPage = () => {
           <button type="submit">Log In</button>
         </form>
         {error && <p>{error}</p>}
+        <p style={{ textAlign: "center", marginTop: "10px" }}>
+          Don’t have an account?{" "}
+          <span
+            style={{ color: "#4f46e5", cursor: "pointer", fontWeight: "bold" }}
+            onClick={() => navigate("/signup")}
+          >
+            Sign Up
+          </span>
+        </p>
       </div>
     </div>
   );

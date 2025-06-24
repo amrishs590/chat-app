@@ -4,19 +4,88 @@ import { useNavigate } from "react-router-dom";
 
 const ChatPage = () => {
   const navigate = useNavigate();
-  const [userEmail, setUserEmail] = useState("");
+  const [currentUser, setCurrentUser] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMsg, setNewMsg] = useState("");
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        navigate("/login");
-      } else {
-        setUserEmail(data.session.user.email);
-      }
+    const fetchData = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) return navigate("/login");
+
+      const currentUser = sessionData.session.user;
+      setCurrentUser(currentUser);
+
+      const { data: userList } = await supabase
+        .from("profiles")
+        .select("id, email");
+
+      const filteredUsers = userList.filter((u) => u.id !== currentUser.id);
+      setUsers(filteredUsers);
     };
-    getSession();
+
+    fetchData();
   }, [navigate]);
+
+  useEffect(() => {
+    if (!selectedUser || !currentUser) return;
+
+    const loadMessages = async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .or(
+          `and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${currentUser.id})`
+        )
+        .order("created_at", { ascending: true });
+
+      if (data) setMessages(data);
+    };
+
+    loadMessages();
+
+    const channel = supabase
+      .channel("realtime:messages")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+        (payload) => {
+          const msg = payload.new;
+          if (
+            (msg.sender_id === currentUser.id &&
+              msg.receiver_id === selectedUser.id) ||
+            (msg.sender_id === selectedUser.id &&
+              msg.receiver_id === currentUser.id)
+          ) {
+            setMessages((prev) => [...prev, msg]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedUser, currentUser]);
+
+  const sendMessage = async () => {
+    if (!newMsg.trim()) return;
+
+    await supabase.from("messages").insert([
+      {
+        sender_id: currentUser.id,
+        receiver_id: selectedUser.id,
+        message: newMsg.trim(),
+      },
+    ]);
+    setNewMsg("");
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -24,10 +93,84 @@ const ChatPage = () => {
   };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>Welcome to Chat Page</h2>
-      <p>Logged in as: {userEmail}</p>
-      <button onClick={handleLogout}>Logout</button>
+    <div style={{ display: "flex", height: "100vh" }}>
+      {/* User List */}
+      <div style={{ width: "250px", borderRight: "1px solid #ccc", padding: "20px" }}>
+        <h3>Users</h3>
+        {users.map((user) => (
+          <div
+            key={user.id}
+            style={{
+              padding: "10px",
+              cursor: "pointer",
+              background: selectedUser?.id === user.id ? "#e0e7ff" : "transparent",
+              borderRadius: "5px",
+            }}
+            onClick={() => setSelectedUser(user)}
+          >
+            {user.email}
+          </div>
+        ))}
+        <button onClick={handleLogout} style={{ marginTop: "20px" }}>
+          Logout
+        </button>
+      </div>
+
+      {/* Chat Area */}
+      <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column" }}>
+        {selectedUser ? (
+          <>
+            <h3>Chat with {selectedUser.email}</h3>
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                marginBottom: "10px",
+                border: "1px solid #ccc",
+                padding: "10px",
+                borderRadius: "5px",
+              }}
+            >
+              {messages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    textAlign: msg.sender_id === currentUser.id ? "right" : "left",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <span
+                    style={{
+                      backgroundColor:
+                        msg.sender_id === currentUser.id ? "#4f46e5" : "#e5e5e5",
+                      color: msg.sender_id === currentUser.id ? "white" : "black",
+                      padding: "8px 12px",
+                      borderRadius: "15px",
+                      display: "inline-block",
+                      maxWidth: "70%",
+                    }}
+                  >
+                    {msg.message}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <input
+                type="text"
+                value={newMsg}
+                onChange={(e) => setNewMsg(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                placeholder="Type a message..."
+                style={{ width: "80%", padding: "10px", marginRight: "10px" }}
+              />
+              <button onClick={sendMessage}>Send</button>
+            </div>
+          </>
+        ) : (
+          <h3>Select a user to start chatting</h3>
+        )}
+      </div>
     </div>
   );
 };
