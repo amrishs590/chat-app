@@ -126,3 +126,11 @@
   font-size: 18px;
   color: #6b7280;
 }
+
+.seen-indicator {
+  font-size: 12px;
+  color: #4f46e5;
+  display: block;
+  margin-top: 4px;
+  text-align: right;
+}

@@ -1,16 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
+import React, { useRef } from "react";
 import "./ChatPage.css";
 
 const ChatPage = () => {
   const navigate = useNavigate();
+  const bottomRef = useRef(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
   const [friendNames, setFriendNames] = useState({});
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -20,7 +26,9 @@ const ChatPage = () => {
       const currentUser = sessionData.session.user;
       setCurrentUser(currentUser);
 
-      const { data: userList } = await supabase.from("profiles").select("id, email");
+      const { data: userList } = await supabase
+        .from("profiles")
+        .select("id, email");
       const filteredUsers = userList.filter((u) => u.id !== currentUser.id);
       setUsers(filteredUsers);
 
@@ -43,15 +51,27 @@ const ChatPage = () => {
     if (!selectedUser || !currentUser) return;
 
     const loadMessages = async () => {
-      const { data } = await supabase
-        .from("messages")
-        .select("*")
-        .or(
-          `and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${currentUser.id})`
-        )
-        .order("created_at", { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from("messages")
+          .select("*")
+          .or(
+            `and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${currentUser.id})`
+          )
+          .order("created_at", { ascending: true });
 
-      if (data) setMessages(data);
+        if (error) throw error;
+
+        setMessages(data);
+
+        await supabase.from("messages").update({ seen: true }).match({
+          receiver_id: currentUser.id,
+          sender_id: selectedUser.id,
+          seen: false,
+        });
+      } catch (err) {
+        console.error("Load message error:", err.message);
+      }
     };
 
     loadMessages();
@@ -113,15 +133,13 @@ const ChatPage = () => {
   };
 
   const updateFriendName = async (friendId, name) => {
-    const { data, error } = await supabase
-      .from("friend_names")
-      .upsert([
-        {
-          user_id: currentUser.id,
-          friend_id: friendId,
-          custom_name: name,
-        },
-      ]);
+    const { data, error } = await supabase.from("friend_names").upsert([
+      {
+        user_id: currentUser.id,
+        friend_id: friendId,
+        custom_name: name,
+      },
+    ]);
 
     if (!error) {
       setFriendNames((prev) => ({ ...prev, [friendId]: name }));
@@ -143,7 +161,9 @@ const ChatPage = () => {
         {users.map((user) => (
           <div
             key={user.id}
-            className={`user-item ${selectedUser?.id === user.id ? "selected-user" : ""}`}
+            className={`user-item ${
+              selectedUser?.id === user.id ? "selected-user" : ""
+            }`}
             onClick={() => setSelectedUser(user)}
             style={{ position: "relative" }}
           >
@@ -151,7 +171,10 @@ const ChatPage = () => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                const newName = prompt("Enter custom name:", friendNames[user.id] || "");
+                const newName = prompt(
+                  "Enter custom name:",
+                  friendNames[user.id] || ""
+                );
                 if (newName !== null) {
                   updateFriendName(user.id, newName);
                 }
@@ -187,9 +210,15 @@ const ChatPage = () => {
               {messages.map((msg, idx) => (
                 <div
                   key={idx}
-                  className={`chat-bubble ${msg.sender_id === currentUser.id ? "sent" : "received"}`}
+                  className={`chat-bubble ${
+                    msg.sender_id === currentUser.id ? "sent" : "received"
+                  }`}
                 >
-                  {msg.message}
+                  <div>{msg.message}</div>
+                  {msg.sender_id === currentUser.id && msg.seen && (
+                    <span className="seen-indicator">✓ Seen</span>
+                  )}
+                  <div ref={bottomRef}></div>
                 </div>
               ))}
             </div>
