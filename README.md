@@ -37,8 +37,7 @@ It provides a clean, responsive, and secure chat experience with **real-time mes
 | **Backend / Realtime DB** | Supabase |
 | **Styling** | Tailwind CSS |
 | **Auth** | Supabase Auth |
-| **Realtime Engine** | Supabase Realtime |
-| **Deployment** | Vercel / Netlify |
+| **Deployment** | Vercel |
 
 ---
 
