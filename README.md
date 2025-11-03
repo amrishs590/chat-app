@@ -73,9 +73,9 @@ It provides a clean, responsive, and secure chat experience with **real-time mes
 
 **3. Configure Supabase**
 
-  Create a .env.local file in your project root:
-  VITE_SUPABASE_URL=your_supabase_url
-  VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+  - Create a .env.local file in your project root:
+  - VITE_SUPABASE_URL=your_supabase_url
+  - VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 **4. Run the App**
 
