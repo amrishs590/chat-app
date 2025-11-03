@@ -64,12 +64,12 @@ It provides a clean, responsive, and secure chat experience with **real-time mes
 
 **1. Clone the Repository**
 
-   git clone https://github.com/amrishs590/ChatApp.git
-   cd ChatApp
+    git clone https://github.com/amrishs590/ChatApp.git
+    cd ChatApp
 
 **2. Install Dependencies**
    
-   npm install
+     npm install
 
 **3. Configure Supabase**
 
@@ -79,6 +79,6 @@ It provides a clean, responsive, and secure chat experience with **real-time mes
 
 **4. Run the App**
 
-  npm run dev
+     npm run dev
 
 
